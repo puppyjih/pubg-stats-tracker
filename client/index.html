@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>PUBG Stats</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    :root {
+      --bg: #0f1115;
+      --bg-alt: #1b1f27;
+      --panel: #232a33;
+      --panel-alt: #2d3641;
+      --accent: #4d7cff;
+      --accent-grad: linear-gradient(90deg, #568dff, #7d5bff);
+      --danger: #ff4d61;
+      --success: #2ecc71;
+      --warn: #ffb347;
+      --text: #e6edf3;
+      --text-dim: #8a97a5;
+      --radius: 14px;
+      --radius-sm: 6px;
+      --shadow: 0 4px 12px -2px rgba(0, 0, 0, .45);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    h1,
+    h2,
+    h3 {
+      margin: 0;
+      font-weight: 600;
+      letter-spacing: .5px;
+    }
+
+    a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    .wrapper {
+      width: min(1800px, 96vw);
+      margin: 0 auto;
+      padding: 28px clamp(16px, 3vw, 40px) 80px;
+    }
+
+    .search-bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: var(--panel);
+      padding: 14px 20px;
+      border-radius: 50px;
+      box-shadow: var(--shadow);
+      position: sticky;
+      top: 0;
+      z-index: 20;
+    }
+
+    .search-bar select,
+    .search-bar input {
+      background: #10151c;
+      border: 1px solid #2f3a45;
+      color: var(--text);
+      padding: 10px 14px;
+      border-radius: 32px;
+      font-size: 14px;
+      outline: none;
+    }
+
+    .search-bar input {
+      flex: 1;
+    }
+
+    .search-bar button {
+      background: var(--accent-grad);
+      color: #fff;
+      border: none;
+      padding: 11px 26px;
+      font-size: 14px;
+      border-radius: 32px;
+      cursor: pointer;
+      font-weight: 600;
+      letter-spacing: .5px;
+      box-shadow: 0 3px 10px -3px rgba(80, 120, 255, .6);
+    }
+
+    .search-bar button:active {
+      transform: translateY(1px);
+    }
+
+    .grid {
+      display: grid;
+      gap: 22px;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      margin-top: 26px;
+    }
+
+    .card {
+      background: var(--panel);
+      border-radius: var(--radius);
+      padding: 20px 22px;
+      box-shadow: var(--shadow);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card.header {
+      grid-column: 1 / -1;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 28px;
+      align-items: center;
+      background: linear-gradient(140deg, #263141, #1b2330 60%);
+    }
+
+    .avatar {
+      width: 96px;
+      height: 96px;
+      border-radius: 28px;
+      background: var(--accent-grad);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 34px;
+      font-weight: 700;
+      color: #fff;
+      box-shadow: 0 6px 18px -6px rgba(0, 0, 0, .6);
+    }
+
+    .stat-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 18px;
+    }
+
+    .stat {
+      min-width: 110px;
+    }
+
+    .stat label {
+      display: block;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-dim);
+      margin-bottom: 4px;
+    }
+
+    .stat value {
+      display: block;
+      font-size: 20px;
+      font-weight: 600;
+    }
+
+    .badge {
+      display: inline-block;
+      font-size: 11px;
+      padding: 4px 8px;
+      background: var(--panel-alt);
+      border-radius: var(--radius-sm);
+      color: var(--text-dim);
+      margin-right: 6px;
+      margin-bottom: 4px;
+    }
+
+    /* Emphasized badges for match summary (Rank/Kills/Dmg etc.) */
+    .badge-lg {
+      font-size: 13px;
+      padding: 6px 10px;
+      border: 2px solid #46556a;
+      background: linear-gradient(140deg, #2a3441, #3a4656);
+      color: #eef4ff;
+      font-weight: 600;
+      box-shadow: 0 4px 10px -4px rgba(0, 0, 0, .45);
+      border-radius: var(--radius-sm);
+    }
+
+    /* Metallic gradient borders using double background technique */
+    .badge-lg.metal {
+      border: 2px solid transparent;
+      background-origin: border-box;
+      background-clip: padding-box, border-box;
+    }
+
+    .badge-lg.metal-bronze {
+      background-image:
+        linear-gradient(140deg, #2a3441, #3a4656),
+        linear-gradient(135deg, #6f4a2b, #b87333 40%, #e0a15b 60%, #6f4a2b);
+      box-shadow: 0 0 10px -4px rgba(184, 115, 51, 0.55);
+    }
+
+    .badge-lg.metal-silver {
+      background-image:
+        linear-gradient(140deg, #2a3441, #3a4656),
+        linear-gradient(135deg, #9aa3b3, #dfe6ee 40%, #aeb6c6 60%, #8f98a8);
+      box-shadow: 0 0 10px -4px rgba(190, 200, 215, 0.55);
+    }
+
+    .badge-lg.metal-gold {
+      background-image:
+        linear-gradient(140deg, #2a3441, #3a4656),
+        linear-gradient(135deg, #b8891c, #ffd56a 40%, #e2b64a 60%, #a67812);
+      box-shadow: 0 0 10px -4px rgba(230, 190, 80, 0.55);
+    }
+
+    .matches {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .match {
+      background: var(--panel-alt);
+      padding: 12px 14px;
+      border-radius: var(--radius-sm);
+      display: grid;
+      grid-template-columns: 90px 1fr 110px;
+      gap: 12px;
+      align-items: center;
+      transition: .15s background;
+    }
+
+    .match:hover {
+      background: #394454;
+    }
+
+    .match.win {
+      border: 1px solid rgba(80, 180, 120, .6);
+    }
+
+    .match.fail {
+      border: 1px solid rgba(200, 80, 80, .5);
+    }
+
+    .match .mode {
+      font-weight: 600;
+    }
+
+    .match small {
+      color: var(--text-dim);
+      font-size: 11px;
+    }
+
+    .progress-bar {
+      height: 6px;
+      background: #1a2028;
+      border-radius: 4px;
+      overflow: hidden;
+      margin-top: 4px;
+    }
+
+    .progress-bar span {
+      display: block;
+      height: 100%;
+      background: var(--accent-grad);
+    }
+
+    .table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .table th,
+    .table td {
+      padding: 8px 10px;
+      text-align: left;
+      font-size: 13px;
+      border-bottom: 1px solid #303a46;
+    }
+
+    .table th {
+      font-weight: 600;
+      color: var(--text-dim);
+    }
+
+    .note {
+      font-size: 12px;
+      color: var(--text-dim);
+      margin-top: 8px;
+    }
+
+    /* Tabs for match popup */
+    .card.popup {
+      margin-top: 8px;
+    }
+
+    .tab-nav {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .tab-btn {
+      background: #2b3441;
+      color: #cbd6e2;
+      border: 1px solid #3a4656;
+      padding: 6px 10px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+
+    .tab-btn.active {
+      background: var(--accent-grad);
+      color: #fff;
+      border: none;
+    }
+
+    .tab-panel {
+      display: none;
+    }
+
+    .tab-panel.active {
+      display: block;
+    }
+
+    .mini-card {
+      background: #1c232c;
+      border: 1px solid #313d4a;
+      border-radius: 10px;
+      padding: 12px;
+    }
+
+    .section-title {
+      font-size: 15px;
+      font-weight: 600;
+      margin: 0 0 14px;
+      letter-spacing: .5px;
+      position: relative;
+    }
+
+    .section-title:after {
+      content: '';
+      position: absolute;
+      left: 0;
+      bottom: -5px;
+      width: 42px;
+      height: 3px;
+      background: var(--accent-grad);
+      border-radius: 2px;
+    }
+
+    .status-bar {
+      margin-top: 14px;
+      font-size: 13px;
+      color: var(--text-dim);
+    }
+
+    .footer-pad {
+      height: 60px;
+    }
+
+    ::-webkit-scrollbar {
+      width: 10px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: #12171d;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: #2c3642;
+      border-radius: 6px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: #3c4754;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 2fr 8fr;
+      gap: 24px;
+      align-items: start;
+      margin-top: 26px;
+      min-height: 300px;
+    }
+
+    .pin {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: rgba(255, 80, 80, .85);
+      box-shadow: 0 0 0 2px rgba(0, 0, 0, .4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .pin img {
+      width: 10px;
+      height: 10px;
+      object-fit: contain;
+      border-radius: 2px;
+      background: rgba(0, 0, 0, .2);
+    }
+
+    .pin:focus {
+      outline: 2px solid #7d5bff;
+    }
+
+    .pin:hover .pop,
+    .pin:focus .pop {
+      display: block !important;
+    }
+
+    /* Kill/Death tab composite layout */
+    .kd-grid {
+      display: grid;
+      grid-template-columns: minmax(320px, 1fr) 320px;
+      gap: 18px;
+      align-items: start;
+    }
+
+    @media (max-width:1200px) {
+      .kd-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .kd-log-box {
+      background: #161d25;
+      border: 1px solid #2d3742;
+      border-radius: 10px;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      min-height: 360px;
+      max-height: 640px;
+    }
+
+    .kd-log-tabs {
+      display: flex;
+      gap: 6px;
+      padding: 10px 12px 6px;
+      border-bottom: 1px solid #27323d;
+    }
+
+    .kd-log-tabs button {
+      background: #24303c;
+      border: 1px solid #344250;
+      color: #c6d2de;
+      padding: 6px 14px;
+      font-size: 12px;
+      border-radius: 18px;
+      cursor: pointer;
+      font-weight: 600;
+      letter-spacing: .5px;
+    }
+
+    .kd-log-tabs button.active {
+      background: var(--accent-grad);
+      color: #fff;
+      border: none;
+    }
+
+    .kd-log-list {
+      list-style: none;
+      margin: 0;
+      padding: 8px 0 10px;
+      overflow: auto;
+      flex: 1;
+    }
+
+    .kd-log-item {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      padding: 8px 14px;
+      font-size: 12px;
+      border-left: 3px solid transparent;
+    }
+
+    .kd-log-item.kill {
+      border-left-color: #4cafef;
+    }
+
+    .kd-log-item.death {
+      border-left-color: #ff596d;
+      background: rgba(255, 89, 109, .04);
+    }
+
+    .kd-log-item time {
+      font-weight: 600;
+      width: 46px;
+      color: #9fafbd;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .kd-log-item .etype {
+      font-size: 11px;
+      padding: 2px 6px;
+      border-radius: 6px;
+      background: #24303c;
+      color: #9cb2c6;
+      font-weight: 600;
+      letter-spacing: .5px;
+    }
+
+    .kd-log-item.death .etype {
+      background: #5a1f2a;
+      color: #ff97a5;
+    }
+
+    .kd-log-item.kill .etype {
+      background: #1f3f59;
+      color: #89d4ff;
+    }
+
+    .kd-log-item .who {
+      font-weight: 600;
+    }
+
+    .kd-log-item .weapon {
+      font-size: 11px;
+      background: #2a3441;
+      padding: 3px 6px;
+      border-radius: 6px;
+      margin-left: 6px;
+      color: #d0dae4;
+    }
+
+    .kd-log-item .dist {
+      font-size: 11px;
+      color: #8fa2b4;
+      margin-left: 6px;
+    }
+
+    .kd-log-item .inferred {
+      font-size: 10px;
+      color: #ffb347;
+      margin-left: 6px;
+      font-weight: 600;
+    }
+
+    .kd-log-empty {
+      font-size: 12px;
+      color: var(--text-dim);
+      padding: 14px;
+    }
+
+    @media (max-width: 900px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (min-width: 1400px) {
+      .layout {
+        grid-template-columns: 4fr 8fr;
+        /* 더 넓은 데스크톱에서 좌우 비율 확대 */
+        gap: 28px;
+      }
+    }
+
+    /* .left-col, .right-col: 레이아웃 그리드 영역 (필요 시 개별 스타일 확장) */
+
+    /* 시즌 패널 카드 높이 과도하게 길어지지 않게 (필요시 조정) */
+    #seasonPanel .card {
+      max-height: 460px;
+      overflow: auto;
+    }
+
+    @media (max-width: 640px) {
+      .match {
+        grid-template-columns: 1fr;
+      }
+
+      .card.header {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .avatar {
+        width: 72px;
+        height: 72px;
+        font-size: 28px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrapper">
+    <form id="form" class="search-bar">
+      <select id="platform">
+        <option value="steam">steam</option>
+        <option value="kakao">kakao</option>
+        <option value="psn">psn</option>
+        <option value="xbox">xbox</option>
+      </select>
+      <input id="name" placeholder="플레이어 닉네임" required />
+      <input id="limit" type="number" min="1" placeholder="limit (기본 25)" style="max-width:130px" />
+      <button>검색</button>
+    </form>
+
+    <div id="status" class="status-bar"></div>
+
+    <div id="playerHeader" class="grid"></div>
+
+    <!-- 새 2열 레이아웃 -->
+    <div id="contentLayout" class="layout">
+      <div class="left-col">
+        <div id="seasonPanel"></div>
+        <div id="mapPanel" style="margin-top:24px;"></div>
+        <div id="topTeamPanel" style="margin-top:24px;"></div>
+        <div id="weaponPanel" style="margin-top:24px;"></div>
+      </div>
+      <div id="panels" class="right-col"></div>
+    </div>
+  </div>
+  <div class="footer-pad"></div>
+  <script src="./app.js" type="module"></script>
+</body>
+
+</html>
