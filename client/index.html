@@ -48,7 +48,7 @@
     }
 
     .wrapper {
-      width: min(1800px, 96vw);
+      width: min(1600px, 96vw);
       margin: 0 auto;
       padding: 28px clamp(16px, 3vw, 40px) 80px;
     }
@@ -379,7 +379,7 @@
 
     .layout {
       display: grid;
-      grid-template-columns: 2fr 8fr;
+      grid-template-columns: 3fr 7fr;
       gap: 24px;
       align-items: start;
       margin-top: 26px;
@@ -405,15 +405,32 @@
       object-fit: contain;
       border-radius: 2px;
       background: rgba(0, 0, 0, .2);
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
+
+    .pin span {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
     }
 
     .pin:focus {
       outline: 2px solid #7d5bff;
     }
 
-    .pin:hover .pop,
-    .pin:focus .pop {
-      display: block !important;
+    /* 모든 핀은 오버레이 팝업을 사용하므로 내부 pop은 항상 숨김 */
+    .pin .pop {
+      display: none !important;
+    }
+
+    /* 클러스터 핀은 오버레이 팝업을 사용하므로 내부 cluster-pop은 항상 숨김 */
+    .pin.cluster-pin:hover>.cluster-pop,
+    .pin.cluster-pin:focus>.cluster-pop {
+      display: none !important;
     }
 
     /* Kill/Death tab composite layout */

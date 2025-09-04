@@ -719,37 +719,73 @@ const vehicleIconAliases = {
 
 function renderKillMap(d) {
   const key = mapNameToAssetKey(d.mapName);
-  // 고해상도 webp 직접 사용 (저해상도 프리로드 제거)
   const hi = `/assets/Maps/converted-webp-4096/${key}_High_Res.webp`;
-  const kills = (d.kills || []).slice(0, 100).map(k => buildPin({
-    nx: k.nx,
-    ny: k.ny,
-    left: (k.nx != null) ? (k.nx * 100) : -10,
-    top: (k.ny != null) ? (k.ny * 100) : -10, // 상하 반전 적용
-    icon: weaponCodeToIcon(k.weaponCode),
-    color: 'rgba(255,80,80,.9)',
-    title: `${k.victim} • ${k.weapon}${k.headshot ? ' • HS' : ''}${k.distance ? ' • ' + Math.round(k.distance) + 'm' : ''}${(typeof k.timeSec === 'number') ? ' • ' + formatMMSS(k.timeSec) : (k.time ? ' • ' + new Date(k.time).toLocaleTimeString() : '')}`,
+  // 1) 이벤트 수집 (id 부여)
+  const killEvents = (d.kills || []).slice(0, 200).map((k, i) => ({
+    type: 'kill',
+    id: 'k' + i,
+    nx: k.nx, ny: k.ny,
+    raw: k,
+    title: `${k.victim} • ${k.weapon}${k.headshot ? ' • HS' : ''}${k.distance ? ' • ' + Math.round(k.distance) + 'm' : ''}${(typeof k.timeSec === 'number') ? ' • ' + formatMMSS(k.timeSec) : (k.time ? ' • ' + new Date(k.time).toLocaleTimeString() : '')}`
+  }));
+  const deathEvents = (d.deaths || []).slice(0, 50).map((k, i) => ({
+    type: 'death',
+    id: 'd' + i,
+    nx: k.nx, ny: k.ny,
+    raw: k,
+    title: `☠ by ${k.attacker} • ${k.weapon}${k.headshot ? ' • HS' : ''}${k.distance ? ' • ' + Math.round(k.distance) + 'm' : ''}${(typeof k.timeSec === 'number') ? ' • ' + formatMMSS(k.timeSec) : (k.time ? ' • ' + new Date(k.time).toLocaleTimeString() : '')}`
+  }));
+  const allEvents = [...killEvents, ...deathEvents].filter(e => e.nx != null && e.ny != null);
+  // 2) 클러스터 계산
+  const clusters = computePinClusters(allEvents, 0.015); // 약 1.5% 거리
+  const clusteredIds = new Set(clusters.flatMap(c => c.ids));
+  // 3) 기본 핀 생성 (클러스터에 속한 것은 hidden)
+  const basePins = allEvents.map(ev => buildPin({
+    id: ev.id,
+    nx: ev.nx,
+    ny: ev.ny,
+    left: ev.nx * 100,
+    top: ev.ny * 100,
+    icon: weaponCodeToIcon(ev.raw.weaponCode),
+    color: ev.type === 'kill' ? 'rgba(80,140,255,.95)' : 'rgba(255,80,80,.9)',
+    title: ev.title,
+    hidden: clusteredIds.has(ev.id),
+    extraClass: (clusteredIds.has(ev.id) ? 'cluster-member' : '') + ' pin-base pin-' + ev.type
   })).join('');
-  const deaths = (d.deaths || []).slice(0, 10).map(k => buildPin({
-    nx: k.nx,
-    ny: k.ny,
-    left: (k.nx != null) ? (k.nx * 100) : -10,
-    top: (k.ny != null) ? (k.ny * 100) : -10, // 상하 반전 적용
-    icon: weaponCodeToIcon(k.weaponCode),
-    color: 'rgba(80,140,255,.95)',
-    title: `☠ by ${k.attacker} • ${k.weapon}${k.headshot ? ' • HS' : ''}${k.distance ? ' • ' + Math.round(k.distance) + 'm' : ''}${(typeof k.timeSec === 'number') ? ' • ' + formatMMSS(k.timeSec) : (k.time ? ' • ' + new Date(k.time).toLocaleTimeString() : '')}`,
-  })).join('');
-  const content = kills + deaths;
-  // Zoom/drag container
+  // 4) 클러스터 핀 생성
+  const clusterPins = clusters.map((c, idx) => {
+    // 단순 총 개수만 표시
+    const label = c.ids.length;
+    const listHtml = c.ids.map(cid => {
+      const ev = allEvents.find(e => e.id === cid);
+      if (!ev) return '';
+      return `<div class="cluster-item" data-target="${cid}" style="padding:4px 6px;cursor:pointer;display:flex;gap:4px;align-items:center;">` +
+        `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${ev.type === 'kill' ? '#508cff' : '#ff5050'}"></span>` +
+        `<span style="font-size:11px;">${escapeHtml(ev.raw.timeSec != null ? formatMMSS(ev.raw.timeSec) : '')} ${escapeHtml(ev.type === 'kill' ? (ev.raw.victim || '') : (ev.raw.attacker || ''))}</span>` +
+        `</div>`;
+    }).join('');
+    const title = `클러스터 ${label}`;
+    return `
+      <div class="pin cluster-pin" data-cluster="1" data-members="${c.ids.join(',')}" style="left:${c.cx * 100}%;top:${c.cy * 100}%;background:#ffd247;color:#1a1d21;font-weight:700;border:1px solid #d9b200;width:8px;height:8px;">
+        <span style="font-size:9px;line-height:1;">${label}</span>
+        <div class="pop cluster-pop" style="position:absolute; left:12px; top:-4px; background:rgba(15,18,25,.97); border:1px solid #3a4660; color:#d6e2ef; font-size:11px; padding:6px 8px; border-radius:6px; display:none; max-height:180px; overflow:auto; min-width:140px;">
+          <div style="font-weight:600;margin-bottom:4px;">이벤트</div>
+          ${listHtml}
+          <div style="border-top:1px solid #2d3643;margin-top:4px;padding-top:4px;font-size:10px;color:#7d8b9b;">하나 선택 → 확장</div>
+        </div>
+      </div>`;
+  }).join('');
+  const content = basePins + clusterPins;
   const id = `map-${Math.random().toString(36).slice(2, 8)}`;
   return `
     <div id="${id}" class="mapwrap" style="position:relative; width:100%; max-width:820px; aspect-ratio:1; background:#0e131a; border:1px solid #2f3a45; border-radius:10px; overflow:hidden; margin-bottom:12px; touch-action:none;">
       <div class="map-canvas" style="position:absolute; inset:0; transform-origin: 0 0;">
-  <img class="map-img" src="${hi}" alt="map" style="position:absolute; left:0; top:0; width:100%; height:100%; object-fit:cover; filter:contrast(1.05) saturate(1.05);"/>
+        <img class="map-img" src="${hi}" alt="map" style="position:absolute; left:0; top:0; width:100%; height:100%; object-fit:cover; filter:contrast(1.05) saturate(1.05);"/>
         <div class="pins" style="position:absolute; left:0; top:0; width:100%; height:100%;">
           ${content}
         </div>
       </div>
+  <div class="cluster-overlay" style="position:absolute;inset:0;z-index:60;pointer-events:none;"></div>
       <div class="map-controls" style="position:absolute; right:8px; bottom:8px; display:flex; gap:6px;">
         <button data-zoom="in" style="background:#2b3441;border:1px solid #3a4656;color:#cbd6e2;padding:6px 9px;border-radius:8px;cursor:pointer;">+</button>
         <button data-zoom="out" style="background:#2b3441;border:1px solid #3a4656;color:#cbd6e2;padding:6px 9px;border-radius:8px;cursor:pointer;">-</button>
@@ -757,6 +793,33 @@ function renderKillMap(d) {
       </div>
     </div>
   `;
+}
+
+// 간단한 O(n^2) 근접 클러스터링 (이벤트 수가 많지 않으므로 허용)
+function computePinClusters(events, thresholdNorm = 0.015) {
+  const visited = new Set();
+  const clusters = [];
+  for (let i = 0; i < events.length; i++) {
+    if (visited.has(events[i].id)) continue;
+    const e = events[i];
+    const group = [e];
+    for (let j = i + 1; j < events.length; j++) {
+      const f = events[j];
+      if (visited.has(f.id)) continue;
+      const dx = (e.nx - f.nx);
+      const dy = (e.ny - f.ny);
+      if ((dx * dx + dy * dy) <= thresholdNorm * thresholdNorm) {
+        group.push(f);
+      }
+    }
+    if (group.length >= 2) {
+      group.forEach(g => visited.add(g.id));
+      const cx = group.reduce((s, g) => s + g.nx, 0) / group.length;
+      const cy = group.reduce((s, g) => s + g.ny, 0) / group.length;
+      clusters.push({ ids: group.map(g => g.id), cx, cy });
+    }
+  }
+  return clusters;
 }
 
 // 새: 지도 + 로그 콤포지트
@@ -816,11 +879,12 @@ function buildKillDeathLog(d) {
   return `${tabs}${list}`;
 }
 
-function buildPin({ nx, ny, left, top, icon, color, title }) {
-  const style = `left:${left}%;top:${top}%;background:${color}`;
+function buildPin({ id, nx, ny, left, top, icon, color, title, hidden, extraClass }) {
+  const style = `left:${left}%;top:${top}%;background:${color};${hidden ? 'display:none;' : ''}`;
   const safeTitle = title?.replace(/["<>]/g, '') || '';
+  const cls = 'pin ' + (extraClass || '');
   return `
-  <div class="pin" style="${style}" tabindex="0" aria-label="${safeTitle}" data-nx="${(nx ?? '').toString()}" data-ny="${(ny ?? '').toString()}">
+  <div class="${cls}" data-id="${id || ''}" style="${style}" tabindex="0" aria-label="${safeTitle}" data-nx="${(nx ?? '').toString()}" data-ny="${(ny ?? '').toString()}">
       ${icon ? `<img src="${icon}" alt=""/>` : '<span></span>'}
       <div class="pop" style="position:absolute; left:12px; top:-4px; background:rgba(10,12,16,.95); border:1px solid #2e3845; color:#c9d4e0; font-size:11px; padding:5px 8px; border-radius:6px; white-space:nowrap; display:none;">${safeTitle}</div>
     </div>
@@ -839,6 +903,12 @@ function enablePanZoom(rootId) {
   let scale = 1, tx = 0, ty = 0;
   let dragging = false, sx = 0, sy = 0;
   function apply() { canvas.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`; }
+  // scale 값을 dataset에 노출 (클러스터 팝업 위치/보정 등 추가 기능 대비)
+  function applyWithDataset() { apply(); root.dataset.scale = String(scale); }
+  // apply 교체
+  function applyWrapper() { applyWithDataset(); }
+  // 최초 dataset 설정
+  root.dataset.scale = String(scale);
   function clampScale(s) { return Math.min(4, Math.max(1, s)); }
   // Mouse wheel zoom
   root.addEventListener('wheel', (e) => {
@@ -851,7 +921,7 @@ function enablePanZoom(rootId) {
     const cx = e.clientX - rect.left; const cy = e.clientY - rect.top;
     const k = scale / prev - 1;
     tx -= (cx - tx) * k; ty -= (cy - ty) * k;
-    apply();
+    applyWithDataset();
   }, { passive: false });
   // Drag
   root.addEventListener('pointerdown', (e) => {
@@ -860,21 +930,278 @@ function enablePanZoom(rootId) {
     if (t.closest && (t.closest('.map-controls') || t.closest('button') || t.closest('.pin'))) return;
     dragging = true; sx = e.clientX - tx; sy = e.clientY - ty; root.setPointerCapture(e.pointerId);
   });
-  root.addEventListener('pointermove', (e) => { if (!dragging) return; tx = e.clientX - sx; ty = e.clientY - sy; apply(); });
+  root.addEventListener('pointermove', (e) => { if (!dragging) return; tx = e.clientX - sx; ty = e.clientY - sy; applyWithDataset(); });
   root.addEventListener('pointerup', (e) => { dragging = false; root.releasePointerCapture(e.pointerId); });
-  btnIn && (btnIn.onclick = () => { scale = clampScale(scale * 1.2); apply(); });
-  btnOut && (btnOut.onclick = () => { scale = clampScale(scale / 1.2); apply(); });
-  btnReset && (btnReset.onclick = () => { scale = 1; tx = 0; ty = 0; apply(); });
+  btnIn && (btnIn.onclick = () => { scale = clampScale(scale * 1.2); applyWithDataset(); });
+  btnOut && (btnOut.onclick = () => { scale = clampScale(scale / 1.2); applyWithDataset(); });
+  btnReset && (btnReset.onclick = () => { scale = 1; tx = 0; ty = 0; applyWithDataset(); });
   // 원점 토글 없음
-  // Pin popovers
+  // Pin popovers - 줌에 상관없이 일정한 크기로 표시
   root.querySelectorAll('.pin').forEach(pin => {
     const pop = pin.querySelector('.pop');
-    pin.addEventListener('mouseenter', () => pop && (pop.style.display = 'block'));
-    pin.addEventListener('mouseleave', () => pop && (pop.style.display = 'none'));
-    pin.addEventListener('focus', () => pop && (pop.style.display = 'block'));
-    pin.addEventListener('blur', () => pop && (pop.style.display = 'none'));
+    if (!pop) return;
+
+    // 기존 팝업을 완전히 비활성화
+    pop.style.display = 'none !important';
+    pop.style.visibility = 'hidden';
+    pop.style.opacity = '0';
+    pop.style.pointerEvents = 'none';
+
+    pin.addEventListener('mouseenter', () => {
+      if (pop && !pin.classList.contains('cluster-pin')) {
+        showPinOverlayPopup(root, pin, pop);
+      }
+    });
+    pin.addEventListener('mouseleave', () => {
+      if (!pin.classList.contains('cluster-pin')) {
+        hidePinOverlayPopup(root);
+      }
+    });
+    pin.addEventListener('focus', () => {
+      if (pop && !pin.classList.contains('cluster-pin')) {
+        showPinOverlayPopup(root, pin, pop);
+      }
+    });
+    pin.addEventListener('blur', () => {
+      if (!pin.classList.contains('cluster-pin')) {
+        hidePinOverlayPopup(root);
+      }
+    });
   });
+  setupClusterInteractions(root);
   root.dataset.pzWired = '1';
+}
+
+function setupClusterInteractions(root) {
+  const mapCanvas = root.querySelector('.map-canvas');
+  if (!mapCanvas) return;
+  const overlay = root.querySelector('.cluster-overlay');
+  // 클러스터 핀 hover 시 팝 표시 (기본 pop 로직 이미 있음)
+  root.querySelectorAll('.cluster-pin').forEach(cp => {
+    const pop = cp.querySelector('.cluster-pop');
+    if (!pop) return;
+    // hover 시 overlay에 고정 팝업 생성 (줌 배율 무관)
+    cp.addEventListener('mouseenter', () => {
+      if (root.dataset.clusterExpanded === '1') return;
+      showClusterOverlayPopup(root, cp, pop, overlay);
+    });
+    // 클러스터 오리지널 pop 내부 클릭 바인딩은 overlay 복제본에서만 처리 (중복 제거)
+  });
+  // 바깥 클릭 복원
+  root.addEventListener('click', (e) => {
+    if (root.dataset.clusterExpanded === '1') {
+      // 핀 또는 팝 클릭이면 무시
+      if (e.target.closest('.pin') || e.target.closest('.cluster-popup-fixed')) return;
+      restoreClusters(root);
+      hideClusterOverlayPopup(root);
+    } else {
+      // 확장 전 상태에서 클러스터 아이템 클릭은 허용
+      if (e.target.closest('.cluster-item')) {
+        return;
+      }
+      // 핀 외부 클릭 시 팝업 닫기
+      if (!e.target.closest('.cluster-pin') && !e.target.closest('.cluster-popup-fixed')) {
+        hideClusterOverlayPopup(root);
+      }
+    }
+  });
+}
+
+function showPinOverlayPopup(root, pin, popOriginal) {
+  const overlay = root.querySelector('.cluster-overlay');
+  if (!overlay || !popOriginal) return;
+
+  // 기존 팝업 제거
+  hidePinOverlayPopup(root);
+
+  // 기존 팝업 숨기기
+  popOriginal.style.display = 'none';
+
+  const rectRoot = root.getBoundingClientRect();
+  const rectPin = pin.getBoundingClientRect();
+  const div = document.createElement('div');
+  div.className = 'pin-popup-fixed';
+  div.style.position = 'absolute';
+  div.style.left = (rectPin.left - rectRoot.left + 12) + 'px';
+  div.style.top = (rectPin.top - rectRoot.top - 4) + 'px';
+  div.style.background = 'rgba(10,12,16,.95)';
+  div.style.border = '1px solid #2e3845';
+  div.style.color = '#c9d4e0';
+  div.style.fontSize = '11px';
+  div.style.padding = '5px 8px';
+  div.style.borderRadius = '6px';
+  div.style.whiteSpace = 'nowrap';
+  div.style.pointerEvents = 'none';
+  div.style.zIndex = '9998';
+  div.innerHTML = popOriginal.innerHTML;
+  overlay.appendChild(div);
+}
+
+function hidePinOverlayPopup(root) {
+  const overlay = root.querySelector('.cluster-overlay');
+  if (!overlay) return;
+  overlay.querySelectorAll('.pin-popup-fixed').forEach(el => el.remove());
+
+  // 모든 일반 핀의 기존 팝업도 숨기기
+  root.querySelectorAll('.pin:not(.cluster-pin) .pop').forEach(pop => {
+    pop.style.display = 'none';
+  });
+}
+
+function showClusterOverlayPopup(root, clusterPin, popOriginal, overlay) {
+  if (!overlay || !popOriginal) return;
+  // 기존 팝업 제거
+  hideClusterOverlayPopup(root);
+  // 오버레이가 클릭을 받을 수 있도록 활성화
+  overlay.style.pointerEvents = 'auto';
+  const rectRoot = root.getBoundingClientRect();
+  const rectPin = clusterPin.getBoundingClientRect();
+  const div = document.createElement('div');
+  div.className = 'cluster-popup-fixed';
+  div.style.position = 'absolute';
+  div.style.left = (rectPin.left - rectRoot.left + 12) + 'px';
+  div.style.top = (rectPin.top - rectRoot.top - 4) + 'px';
+  div.style.background = 'rgba(15,18,25,.97)';
+  div.style.border = '1px solid #3a4660';
+  div.style.color = '#d6e2ef';
+  div.style.fontSize = '11px';
+  div.style.padding = '6px 8px';
+  div.style.borderRadius = '6px';
+  div.style.maxHeight = '180px';
+  div.style.overflow = 'auto';
+  div.style.minWidth = '140px';
+  div.style.pointerEvents = 'auto';
+  div.style.zIndex = '9999'; // 매우 높은 z-index
+  div.innerHTML = popOriginal.innerHTML; // 복제
+  // 내부 아이템 클릭 재바인딩 - 이벤트 캐처링 사용
+  div.addEventListener('click', (e) => {
+    // 클릭된 요소가 cluster-item이거나 그 내부 요소인지 확인
+    const clusterItem = e.target.closest('.cluster-item');
+    if (clusterItem) {
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation(); // 추가: 다른 핸들러도 차단
+      const targetId = clusterItem.getAttribute('data-target');
+      hideClusterOverlayPopup(root);
+      expandCluster(clusterPin, targetId, root);
+    }
+  }, true); // 캐처링 모드 사용
+
+  // 디버깅을 위한 개별 바인딩도 유지
+  div.querySelectorAll('.cluster-item').forEach((item, index) => {
+    // mousedown에서 직접 처리 (click이 차단되는 문제 해결)
+    item.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      const targetId = item.getAttribute('data-target');
+      hideClusterOverlayPopup(root);
+      expandCluster(clusterPin, targetId, root);
+    });
+  });
+  overlay.appendChild(div);
+}
+
+function hideClusterOverlayPopup(root) {
+  const overlay = root.querySelector('.cluster-overlay');
+  if (!overlay) return;
+  overlay.querySelectorAll('.cluster-popup-fixed').forEach(el => el.remove());
+  overlay.querySelectorAll('.pin-popup-fixed').forEach(el => el.remove());
+  // 팝업이 없으면 다시 통과시켜 hover 가능
+  overlay.style.pointerEvents = 'none';
+}
+
+function expandCluster(clusterPin, focusId, root) {
+  if (root.dataset.clusterExpanded === '1') return; // 중복 방지
+
+  // 클러스터 핀들의 원래 HTML을 저장 (복원용)
+  if (!root.dataset.originalClusterHtml) {
+    const clusterPins = root.querySelectorAll('.cluster-pin');
+    root.dataset.originalClusterHtml = Array.from(clusterPins).map(cp => cp.outerHTML).join('');
+  }
+
+  const members = (clusterPin.getAttribute('data-members') || '').split(',').filter(Boolean);
+  const pins = members.map(id => root.querySelector(`.pin[data-id="${id}"]`)).filter(Boolean);
+
+  if (!pins.length) return;
+
+  // 숨겨진 개별 핀 표시
+  pins.forEach(p => { p.style.display = 'block'; });
+  // 모든 기본 핀 중 선택된 것 제외하고 반투명 처리
+  root.querySelectorAll('.pin.pin-base').forEach(p => {
+    const pid = p.getAttribute('data-id');
+    if (pid === focusId) {
+      p.style.opacity = '1';
+      p.style.zIndex = '20';
+    } else {
+      p.style.opacity = '0.5'; // 0.75에서 0.5로 변경
+      p.style.zIndex = members.includes(pid) ? '10' : '1';
+    }
+    if (pid !== focusId) p.style.transform = 'translate(-50%, -50%)'; // 원래 중앙 정렬로 복원
+  });
+  // 선택 핀 강조
+  const sel = root.querySelector(`.pin[data-id="${focusId}"]`);
+  if (sel) {
+    sel.style.transform = 'translate(-50%, -50%) scale(1.1)'; // 중앙 정렬 유지하면서 확대
+    // sel.style.boxShadow = '0 0 0 3px rgba(255,255,255,0.25)'; // 흰색 테두리 제거
+    sel.style.zIndex = '20';
+  }
+  // 클러스터 핀 숨김
+  clusterPin.style.display = 'none';
+  // 다른 클러스터 핀 숨김
+  root.querySelectorAll('.cluster-pin').forEach(cp => { if (cp !== clusterPin) cp.style.display = 'none'; });
+  root.dataset.clusterExpanded = '1';
+}
+
+function restoreClusters(root) {
+  // 원래 클러스터 HTML이 저장되어 있다면 완전히 복원
+  if (root.dataset.originalClusterHtml) {
+    // 기존 클러스터 핀들 제거
+    root.querySelectorAll('.cluster-pin').forEach(cp => cp.remove());
+
+    // 원래 HTML 복원
+    const mapCanvas = root.querySelector('.map-canvas');
+    if (mapCanvas) {
+      mapCanvas.insertAdjacentHTML('beforeend', root.dataset.originalClusterHtml);
+
+      // 복원된 클러스터 핀들에 이벤트 다시 바인딩
+      setupClusterInteractions(root);
+    }
+
+    // 저장된 HTML 삭제
+    delete root.dataset.originalClusterHtml;
+  } else {
+    // 기본 복원 방식 (fallback)
+    root.querySelectorAll('.cluster-pin').forEach(cp => {
+      cp.style.display = 'block';
+      cp.style.removeProperty('opacity');
+      cp.style.removeProperty('transform');
+      cp.style.removeProperty('box-shadow');
+      cp.style.removeProperty('z-index');
+      cp.style.removeProperty('position');
+      const pop = cp.querySelector('.cluster-pop');
+      if (pop) pop.style.display = 'none';
+    });
+  }
+
+  // 클러스터 멤버 개별 핀 다시 숨김
+  root.querySelectorAll('.pin.cluster-member').forEach(p => {
+    p.style.display = 'none';
+    p.style.opacity = '1';
+    p.style.removeProperty('transform');
+    // p.style.removeProperty('box-shadow'); // 박스섀도우 제거됨
+    p.style.removeProperty('z-index');
+  });
+  // 나머지 기본 핀 원복
+  root.querySelectorAll('.pin.pin-base').forEach(p => {
+    if (!p.classList.contains('cluster-member')) {
+      p.style.opacity = '1';
+      p.style.removeProperty('transform');
+      // p.style.removeProperty('box-shadow'); // 박스섀도우 제거됨
+      p.style.removeProperty('z-index');
+    }
+  });
+  root.dataset.clusterExpanded = '0';
 }
 
 function renderRawKillLogs(d) {

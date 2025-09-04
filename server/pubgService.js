@@ -1096,12 +1096,11 @@ function computeMapStats(matches) {
     if (!x || x.error || !x.my) return;
     const key = x.mapName || 'Unknown';
     const r = x.my.rank ?? x.my.winPlace;
-    const v = m.get(key) || { matches: 0, wins: 0, sumRank: 0, sumKills: 0, sumAssists: 0, sumDamage: 0 };
+    const v = m.get(key) || { matches: 0, wins: 0, sumRank: 0, sumKills: 0, sumDamage: 0 };
     v.matches += 1;
     if (r === 1) v.wins += 1;
     if (typeof r === 'number') v.sumRank += r;
     v.sumKills += x.my.kills || 0;
-    v.sumAssists += x.my.assists || 0;
     v.sumDamage += x.my.damage || 0;
     m.set(key, v);
   });
@@ -1112,8 +1111,7 @@ function computeMapStats(matches) {
     winRate: v.matches ? +((v.wins / v.matches) * 100).toFixed(1) : 0,
     avgRank: v.matches ? +((v.sumRank / v.matches).toFixed(2)) : null,
     avgKills: v.matches ? +((v.sumKills / v.matches).toFixed(2)) : 0,
-    avgDamage: v.matches ? +((v.sumDamage / v.matches).toFixed(1)) : 0,
-    avgKDA: v.matches ? +(((v.sumKills + v.sumAssists) / v.matches).toFixed(2)) : 0
+    avgDamage: v.matches ? +((v.sumDamage / v.matches).toFixed(1)) : 0
   }));
   arr.sort((a, b) => b.matches - a.matches);
   return arr;
